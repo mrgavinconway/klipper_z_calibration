@@ -24,7 +24,7 @@ See [SEPARATE_ENDSTOP.md](SEPARATE_ENDSTOP.md) for the implementation details an
     <img src="https://img.shields.io/github/stars/protoloft/klipper_z_calibration?style=flat-square">
   </a>
   <a aria-label="Forks" href="https://github.com/protoloft/klipper_z_calibration/network/members">
-    <img src="https://img.shields.io/github/forks/protoloft/klipper_z_calibration/network/members">
+    <img src="https://img.shields.io/github/forks/protoloft/klipper_z_calibration?style=flat-square">
   </a>
   <a aria-label="License" href="https://github.com/protoloft/klipper_z_calibration/blob/master/LICENSE">
     <img src="https://img.shields.io/github/license/protoloft/klipper_z_calibration?style=flat-square">
@@ -52,7 +52,7 @@ You can find one [here](https://github.com/pRINTERnOODLE/Auto-Z-calibration-for-
 
 And if you like my work and want to support me, you can do so here:
 
-[![ko-fi](https://ko-fi.com/X8X1C0DTD)](https://ko-fi.com/X8X1C0DTD)
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/X8X1C0DTD)
 
 ## Disclaimer
 
