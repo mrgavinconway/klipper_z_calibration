@@ -20,9 +20,9 @@ verify_ready()
     fi
     # output used number of installs
     if [[ $NUM_INSTALLS == 0 ]]; then
-	    echo "Defaulted to one klipper install, if more than one instance, use -n"
+        echo "Defaulted to one klipper install, if more than one instance, use -n"
     else
-	    echo "Number of Installs Selected: $NUM_INSTALLS"
+        echo "Number of Installs Selected: $NUM_INSTALLS"
     fi
     # Fall back to old config
     if [ ! -f "$MOONRAKER_CONFIG" ]; then
@@ -31,7 +31,7 @@ verify_ready()
     fi
 }
 
-# Step 2:  Verify Klipper has been installed
+# Step 2: Verify Klipper has been installed
 check_klipper()
 {
     if [[ $NUM_INSTALLS == 0 ]]; then
@@ -42,15 +42,15 @@ check_klipper()
             exit -1
         fi
     else
-		for (( klip = 1; klip<=$NUM_INSTALLS; klip++ )); do
-			if [ "$(sudo systemctl list-units --full -all -t service --no-legend | grep -F "klipper-$klip.service")" ]; then
-				echo "klipper-$klip.service found!"
-			else
-				echo "klipper-$klip.service NOT found, please ensure you've entered the correct number of klipper instances you're running!"
-				exit -1
-			fi			
-		done	
-	fi
+        for (( klip = 1; klip<=$NUM_INSTALLS; klip++ )); do
+            if [ "$(sudo systemctl list-units --full -all -t service --no-legend | grep -F "klipper-$klip.service")" ]; then
+                echo "klipper-$klip.service found!"
+            else
+                echo "klipper-$klip.service NOT found, please ensure you've entered the correct number of klipper instances you're running!"
+                exit -1
+            fi
+        done
+    fi
 }
 
 # Step 3: Check folders
@@ -73,7 +73,15 @@ check_requirements()
 link_extension()
 {
     echo -n "Linking extension to Klipper... "
-    ln -sf "${SRCDIR}/z_calibration.py" "${KLIPPER_PATH}/klippy/extras/z_calibration.py"
+
+    # Keep the upstream implementation available under a private module name.
+    # The fork wrapper is installed as z_calibration.py so existing
+    # [z_calibration] configurations and CALIBRATE_Z continue to work.
+    ln -sf "${SRCDIR}/z_calibration.py" \
+        "${KLIPPER_PATH}/klippy/extras/z_calibration_upstream.py"
+    ln -sf "${SRCDIR}/z_calibration_separate.py" \
+        "${KLIPPER_PATH}/klippy/extras/z_calibration.py"
+
     echo "[OK]"
 }
 
@@ -107,7 +115,7 @@ add_updater()
         echo -e "\n[update_manager z_calibration]" >> "$MOONRAKER_CONFIG"
         echo "type: git_repo" >> "$MOONRAKER_CONFIG"
         echo "path: ${SRCDIR}" >> "$MOONRAKER_CONFIG"
-        echo "origin: https://github.com/protoloft/klipper_z_calibration.git" >> "$MOONRAKER_CONFIG"
+        echo "origin: https://github.com/mrgavinconway/klipper_z_calibration.git" >> "$MOONRAKER_CONFIG"
         echo "managed_services: klipper" >> "$MOONRAKER_CONFIG"
         echo -e "\n" >> "$MOONRAKER_CONFIG"
         echo "[OK]"
@@ -128,11 +136,11 @@ restart_klipper()
         sudo systemctl restart klipper
         echo "[OK]"
     else
-	    for (( klip = 1; klip<=$NUM_INSTALLS; klip++)); do
+        for (( klip = 1; klip<=$NUM_INSTALLS; klip++)); do
             echo -n "Restarting Klipper-$klip... "
             sudo systemctl restart klipper-$klip
             echo "[OK]"
-	    done
+        done
     fi
 }
 
@@ -142,6 +150,8 @@ uinstall()
         echo -n "Uninstalling z_calibration... "
         rm -f "${KLIPPER_PATH}/klippy/extras/z_calibration.py"
         rm -f "${KLIPPER_PATH}/klippy/extras/z_calibration.pyc"
+        rm -f "${KLIPPER_PATH}/klippy/extras/z_calibration_upstream.py"
+        rm -f "${KLIPPER_PATH}/klippy/extras/z_calibration_upstream.pyc"
         echo "[OK]"
         echo "You can now remove the \"[update_manager z_calibration]\" section in your moonraker.conf and delete this directory."
         echo "You also need to remove the \"[z_calibration]\" section in your Klipper configuration..."
