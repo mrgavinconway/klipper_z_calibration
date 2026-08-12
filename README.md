@@ -8,6 +8,14 @@ It's like automatically baby-stepping on your 3D printer before every print, and
 always be perfect - no matter which nozzle or new flex-plate is being tested.
 </p>
 
+## Fork-specific feature: separate calibration endstop
+
+This fork adds an optional `calibration_endstop_pin` to `[z_calibration]` so automatic Z calibration can use a dedicated physical reference switch without replacing the printer's normal Z homing endstop.
+
+If `calibration_endstop_pin` is omitted, behaviour remains the same as upstream.
+
+See [SEPARATE_ENDSTOP.md](SEPARATE_ENDSTOP.md) for the implementation details and a complete detachable-ZeroClick example.
+
 <p align="center">
   <a aria-label="Downloads" href="https://github.com/protoloft/klipper_z_calibration/releases">
     <img src="https://img.shields.io/github/release/protoloft/klipper_z_calibration?display_name=tag&style=flat-square">
@@ -16,7 +24,7 @@ always be perfect - no matter which nozzle or new flex-plate is being tested.
     <img src="https://img.shields.io/github/stars/protoloft/klipper_z_calibration?style=flat-square">
   </a>
   <a aria-label="Forks" href="https://github.com/protoloft/klipper_z_calibration/network/members">
-    <img src="https://img.shields.io/github/forks/protoloft/klipper_z_calibration?style=flat-square">
+    <img src="https://img.shields.io/github/forks/protoloft/klipper_z_calibration/network/members">
   </a>
   <a aria-label="License" href="https://github.com/protoloft/klipper_z_calibration/blob/master/LICENSE">
     <img src="https://img.shields.io/github/license/protoloft/klipper_z_calibration?style=flat-square">
@@ -44,7 +52,7 @@ You can find one [here](https://github.com/pRINTERnOODLE/Auto-Z-calibration-for-
 
 And if you like my work and want to support me, you can do so here:
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/X8X1C0DTD)
+[![ko-fi](https://ko-fi.com/X8X1C0DTD)](https://ko-fi.com/X8X1C0DTD)
 
 ## Disclaimer
 
