@@ -12,6 +12,13 @@ import logging
 from . import z_calibration_upstream
 
 
+# Dedicated-endstop reference geometry for this Voron V0 / ZeroClick setup.
+# Command-line NOZZLE_POSITION / SWITCH_POSITION parameters still override
+# these values for one-off testing.
+DEDICATED_NOZZLE_SITE = [3.5, 39.5, None]
+DEDICATED_SWITCH_SITE = [17.0, 25.0, None]
+
+
 class _DedicatedEndstopGCodeCommand:
     """Proxy a GCodeCommand and replace an upstream-only endstop suggestion."""
 
@@ -171,6 +178,22 @@ class ZCalibrationHelper(z_calibration_upstream.ZCalibrationHelper):
                 "%s: using dedicated calibration_endstop_pin=%s; normal Z "
                 "homing endstop is unchanged",
                 self.config.get_name(), self.calibration_endstop_pin)
+
+    def _get_nozzle_site(self, gcmd):
+        # For the dedicated calibration switch, use this fork's measured
+        # machine geometry. An explicit command parameter remains available
+        # for one-off positioning tests.
+        if (self.calibration_endstop_pin is not None
+                and not gcmd.get("NOZZLE_POSITION", "")):
+            return list(DEDICATED_NOZZLE_SITE)
+        return super()._get_nozzle_site(gcmd)
+
+    def _get_switch_site(self, gcmd, nozzle_site):
+        # Same rule for the rigid ZeroClick body contact point.
+        if (self.calibration_endstop_pin is not None
+                and not gcmd.get("SWITCH_POSITION", "")):
+            return list(DEDICATED_SWITCH_SITE)
+        return super()._get_switch_site(gcmd, nozzle_site)
 
     def cmd_CALIBRATE_Z(self, gcmd):
         # This is intentionally kept equivalent to upstream's short dispatcher,
