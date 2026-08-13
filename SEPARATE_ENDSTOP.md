@@ -25,11 +25,11 @@ endstop_pin: ^PC6
 calibration_endstop_pin: ^PA3
 
 # Nozzle presses the dedicated reference switch here.
-nozzle_xy_position: 4.5, 42
+nozzle_xy_position: 3.5, 39.5
 
 # With ZeroClick attached, a rigid part of the probe microswitch body presses
 # the same dedicated reference switch here.
-switch_xy_position: 25, 26.5
+switch_xy_position: 17, 25
 
 # Physical bed point to probe with ZeroClick. Probe X/Y offsets are applied by
 # klipper_z_calibration automatically.
