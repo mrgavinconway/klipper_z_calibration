@@ -408,7 +408,11 @@ class CalibrationState:
         self.max_deviation = helper.max_deviation
         self.offset_margins = helper.offset_margins
     def _probe_on_site(self, endstop, site, check_probe=False, split_xy=False,
-                       wiggle=False):
+                       wiggle=False, samples=None, samples_result=None):
+        if samples is None:
+            samples = self.helper.samples
+        if samples_result is None:
+            samples_result = self.helper.samples_result
         pos = self.toolhead.get_position()
         self.helper._move_safe_z(pos, self.helper.lift_speed)
         # move to position
@@ -429,7 +433,7 @@ class CalibrationState:
                                self.helper.probing_speed, wiggle=wiggle)
         retries = 0
         positions = []
-        while len(positions) < self.helper.samples:
+        while len(positions) < samples:
             # probe with second probing speed
             curpos = self.helper._probe(self.gcmd, endstop,
                                         self.helper.position_min,
@@ -448,7 +452,7 @@ class CalibrationState:
                 retries += 1
                 positions = []
         # calculate result
-        if self.helper.samples_result == 'median':
+        if samples_result == 'median':
             return self.helper._calc_median(positions)[2]
         return self.helper._calc_mean(positions)[2]
     def _add_probe_offset(self, site):
@@ -491,7 +495,9 @@ class CalibrationState:
                 # probe switch body
                 switch_zero = self._probe_on_site(self.z_endstop,
                                                   switch_site,
-                                                  check_probe=True)
+                                                  check_probe=True,
+                                                  samples=5,
+                                                  samples_result='median')
                 # probe bed position
                 probe_site = self._add_probe_offset(bed_site)
                 # TODO: remove: deprecated since 2026-05-25

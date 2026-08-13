@@ -60,6 +60,11 @@ end_gcode:
     DETACH_PROBE
 ```
 
+During `CALIBRATE_Z`, the probe-body measurement against the calibration
+switch always uses five samples and selects their median. The nozzle-switch
+and normal bed-probe measurements continue to use the configured `samples`
+and `samples_result` values. `PROBE_Z_ACCURACY` is unchanged.
+
 The `switch_offset` value above is only a placeholder. It must be calibrated for the actual printer before relying on the resulting Z offset.
 
 ## Optional plausibility checks
