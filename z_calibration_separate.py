@@ -69,12 +69,19 @@ class CalibrationState(z_calibration_upstream.CalibrationState):
         if helper.expected_bed_probe_z is not None:
             deviation = abs(probe_zero - helper.expected_bed_probe_z)
             if deviation > helper.bed_probe_max_deviation:
-                raise self.gcmd.error(
-                    "%s: bed probe sanity check failed: measured=%.3f, "
-                    "expected=%.3f, deviation=%.3f > allowed=%.3f"
-                    % (self.gcmd.get_command(), probe_zero,
-                       helper.expected_bed_probe_z, deviation,
-                       helper.bed_probe_max_deviation))
+                details = ("measured=%.3f, expected=%.3f, deviation=%.3f "
+                           "> allowed=%.3f"
+                           % (probe_zero, helper.expected_bed_probe_z,
+                              deviation, helper.bed_probe_max_deviation))
+                if helper.bed_probe_check_mode == 'warn':
+                    self.gcmd.respond_info(
+                        "%s: bed probe sanity warning: %s; continuing "
+                        "because bed_probe_check_mode=warn"
+                        % (self.gcmd.get_command(), details))
+                else:
+                    raise self.gcmd.error(
+                        "%s: bed probe sanity check failed: %s"
+                        % (self.gcmd.get_command(), details))
 
         if helper.expected_nozzle_switch_delta is not None:
             deviation = abs(nozzle_switch_delta
@@ -91,6 +98,14 @@ class CalibrationState(z_calibration_upstream.CalibrationState):
 
 
 class ZCalibrationHelper(z_calibration_upstream.ZCalibrationHelper):
+    _RETRYABLE_CALIBRATION_ERRORS = (
+        'probe samples exceed tolerance',
+        'bed probe sanity check failed',
+        'nozzle/switch geometry sanity check failed',
+        'offset is greater than allowed',
+        'is outside the configured range',
+    )
+
     def __init__(self, config):
         # Optional. If omitted, retain upstream behaviour and use stepper_z's
         # configured endstop for calibration.
@@ -106,10 +121,15 @@ class ZCalibrationHelper(z_calibration_upstream.ZCalibrationHelper):
             'expected_bed_probe_z', None)
         self.bed_probe_max_deviation = config.getfloat(
             'bed_probe_max_deviation', 0.100, above=0.)
+        check_modes = {'error': 'error', 'warn': 'warn'}
+        self.bed_probe_check_mode = config.getchoice(
+            'bed_probe_check_mode', check_modes, 'error')
         self.expected_nozzle_switch_delta = config.getfloat(
             'expected_nozzle_switch_delta', None)
         self.nozzle_switch_max_deviation = config.getfloat(
             'nozzle_switch_max_deviation', 0.150, above=0.)
+        self.calibration_retries = config.getint(
+            'calibration_retries', 0, minval=0, maxval=3)
 
         self.last_bed_probe_z = None
         self.last_nozzle_switch_delta = None
@@ -190,8 +210,26 @@ class ZCalibrationHelper(z_calibration_upstream.ZCalibrationHelper):
         state_gcmd = gcmd
         if self.calibration_endstop is not None:
             state_gcmd = _DedicatedEndstopGCodeCommand(gcmd)
-        state = CalibrationState(self, state_gcmd)
-        state.calibrate_z(switch_offset, nozzle_site, switch_site, bed_site)
+        attempts = self.calibration_retries + 1
+        for attempt in range(attempts):
+            state = CalibrationState(self, state_gcmd)
+            try:
+                state.calibrate_z(switch_offset, nozzle_site, switch_site,
+                                  bed_site)
+                return
+            except self.printer.command_error as error:
+                retryable = self._is_retryable_calibration_error(error)
+                if not retryable or attempt + 1 >= attempts:
+                    raise
+                gcmd.respond_info(
+                    "%s: calibration attempt %d/%d failed: %s. "
+                    "Retrying the complete calibration..."
+                    % (gcmd.get_command(), attempt + 1, attempts, error))
+
+    def _is_retryable_calibration_error(self, error):
+        message = str(error).lower()
+        return any(fragment in message
+                   for fragment in self._RETRYABLE_CALIBRATION_ERRORS)
 
 
 def load_config(config):

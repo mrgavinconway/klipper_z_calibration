@@ -87,6 +87,30 @@ Both checks are disabled unless their corresponding `expected_*` value is config
 
 `expected_bed_probe_z` is an absolute machine-coordinate measurement, so establish or verify its baseline at the thermal state used by the print-start calibration. `expected_nozzle_switch_delta` is a relative measurement and is generally less sensitive to movement of the overall Z datum.
 
+On printers that calibrate over a wide thermal envelope, the absolute bed
+coordinate can be retained as a diagnostic without blocking a valid relative
+calibration:
+
+```ini
+bed_probe_check_mode: warn
+```
+
+The default is `error`, preserving the original fail-closed behaviour. In
+`warn` mode an out-of-range absolute bed measurement is reported to the
+console, while the relative nozzle/switch check and the final `offset_margins`
+remain hard failures.
+
+Known measurement-quality failures can optionally retry the complete
+calibration after the normal `end_gcode` cleanup has run:
+
+```ini
+calibration_retries: 1
+```
+
+The default is zero and the maximum is three. Retries cover exhausted sample
+tolerance, plausibility-check failures, and final offset-limit failures. Motion,
+endstop, macro, and unexpected internal errors are not retried.
+
 The latest successful values are also exposed in the `[z_calibration]` status object as `last_bed_probe_z` and `last_nozzle_switch_delta`.
 
 ## Important pin rule
