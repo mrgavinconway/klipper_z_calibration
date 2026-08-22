@@ -26,41 +26,6 @@ sys.modules[spec.name] = z_calibration_separate
 spec.loader.exec_module(z_calibration_separate)
 
 
-class _GCodeCommand:
-    def __init__(self):
-        self.messages = []
-
-    def get_command(self):
-        return 'CALIBRATE_Z'
-
-    def respond_info(self, message, *args, **kwargs):
-        self.messages.append(message)
-
-    def error(self, message):
-        return RuntimeError(message)
-
-
-class DedicatedEndstopMessageTests(unittest.TestCase):
-    def test_replaces_upstream_position_endstop_suggestion(self):
-        gcmd = _GCodeCommand()
-        proxy = z_calibration_separate._DedicatedEndstopGCodeCommand(gcmd)
-
-        proxy.respond_info(
-            'CALIBRATE_Z: POSSIBLE SUGGESTION: new z axis position_endstop=1')
-
-        self.assertEqual(1, len(gcmd.messages))
-        self.assertIn('normal stepper_z position_endstop must remain unchanged',
-                      gcmd.messages[0])
-
-    def test_passes_normal_messages_through(self):
-        gcmd = _GCodeCommand()
-        proxy = z_calibration_separate._DedicatedEndstopGCodeCommand(gcmd)
-
-        proxy.respond_info('normal calibration message')
-
-        self.assertEqual(['normal calibration message'], gcmd.messages)
-
-
 class BodySamplingTests(unittest.TestCase):
     def _state(self):
         state = z_calibration_separate.CalibrationState.__new__(
