@@ -86,6 +86,78 @@ class ReferenceValidationTests(unittest.TestCase):
             state._validate_reference_measurements(1.000, 10.600, 10.040)
 
 
+class NozzleConditioningTests(unittest.TestCase):
+    def _state(self, values, minimum=5, maximum=10, window=3,
+               tolerance=0.015):
+        helper = types.SimpleNamespace(
+            nozzle_conditioning_samples=minimum,
+            nozzle_conditioning_max_samples=maximum,
+            nozzle_conditioning_window=window,
+            nozzle_conditioning_tolerance=tolerance,
+            tolerance=0.020,
+            lift_speed=20.,
+            speed=50.,
+            position_min=-1.5,
+            probing_speed=5.,
+            _move_safe_z=mock.Mock(),
+            _move=mock.Mock(),
+            _probe=mock.Mock(side_effect=[
+                [0., 0., value] for value in values
+            ]),
+        )
+        state = z_calibration_separate.CalibrationState.__new__(
+            z_calibration_separate.CalibrationState)
+        state.helper = helper
+        state.gcmd = _GCodeCommand()
+        state.toolhead = types.SimpleNamespace(
+            get_position=mock.Mock(return_value=[20., 30., 15., 0.]))
+        return state
+
+    def test_conditioning_stops_after_recent_samples_stabilise(self):
+        state = self._state([
+            1.100, 1.080, 1.050, 1.020, 1.010, 1.009, 1.008
+        ])
+
+        state._condition_nozzle(
+            'endstop', [3.5, 39.5, None], split_xy=True, wiggle=True)
+
+        self.assertEqual(6, state.helper._probe.call_count)
+        self.assertTrue(any(
+            'stable after 6 touches' in message
+            for message in state.gcmd.messages))
+        state.helper._probe.assert_called_with(
+            state.gcmd, 'endstop', -1.5, 5., wiggle=True)
+
+    def test_conditioning_caps_attempts_and_keeps_safety_path_enabled(self):
+        state = self._state(
+            [1.100, 1.080, 1.060, 1.040, 1.020, 1.000],
+            minimum=4, maximum=6, window=3, tolerance=0.005)
+
+        state._condition_nozzle(
+            'endstop', [3.5, 39.5, None], split_xy=False, wiggle=False)
+
+        self.assertEqual(6, state.helper._probe.call_count)
+        self.assertTrue(any(
+            'continuing to measured samples with all normal safety checks enabled'
+            in message for message in state.gcmd.messages))
+
+    def test_conditioning_only_runs_for_first_reference_measurement(self):
+        state = self._state([1.0])
+        state._reference_measurements = []
+        state._condition_nozzle = mock.Mock()
+
+        with mock.patch.object(
+                z_calibration.CalibrationState, '_probe_on_site',
+                return_value=1.0) as upstream_probe:
+            state._probe_on_site(
+                'endstop', [3.5, 39.5, None], split_xy=True, wiggle=True)
+            state._probe_on_site(
+                'endstop', [24., 25., None], check_probe=True)
+
+        self.assertEqual(1, state._condition_nozzle.call_count)
+        self.assertEqual(2, upstream_probe.call_count)
+
+
 class CalibrationRetryTests(unittest.TestCase):
     def _helper(self):
         helper = z_calibration_separate.ZCalibrationHelper.__new__(
