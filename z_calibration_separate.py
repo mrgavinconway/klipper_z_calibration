@@ -12,29 +12,6 @@ import logging
 from . import z_calibration_upstream
 
 
-class _DedicatedEndstopGCodeCommand:
-    """Proxy a GCodeCommand and replace an upstream-only endstop suggestion."""
-
-    def __init__(self, gcmd):
-        self._gcmd = gcmd
-
-    def __getattr__(self, name):
-        return getattr(self._gcmd, name)
-
-    def respond_info(self, msg, *args, **kwargs):
-        # Upstream assumes the calibration switch is also stepper_z's homing
-        # endstop. In dedicated-endstop mode that recommendation is wrong.
-        if ("POSSIBLE SUGGESTION" in msg
-                and "position_endstop" in msg):
-            self._gcmd.respond_info(
-                "%s: dedicated calibration endstop in use; runtime Z offset "
-                "will be applied and the normal stepper_z position_endstop "
-                "must remain unchanged"
-                % (self._gcmd.get_command()), *args, **kwargs)
-            return
-        self._gcmd.respond_info(msg, *args, **kwargs)
-
-
 class CalibrationState(z_calibration_upstream.CalibrationState):
     """Use the configured sample count consistently for the switch-body touch."""
 
@@ -106,8 +83,10 @@ class ZCalibrationHelper(z_calibration_upstream.ZCalibrationHelper):
 
     def cmd_CALIBRATE_Z(self, gcmd):
         # Equivalent to upstream's dispatcher, but use the dedicated-endstop
-        # aware CalibrationState and suppress the irrelevant homing-endstop
-        # suggestion when a separate calibration switch is configured.
+        # aware CalibrationState. Keep upstream's position_endstop suggestion:
+        # even with a separate calibration switch, the normal Z homing endstop
+        # defines the machine-coordinate datum and should be recentered when
+        # Auto-Z consistently needs a large runtime correction.
         self.last_state = False
         if self.z_homing is None:
             raise gcmd.error("%s: must home axes first"
@@ -119,10 +98,7 @@ class ZCalibrationHelper(z_calibration_upstream.ZCalibrationHelper):
         self._log_params(gcmd, switch_offset, nozzle_site, switch_site,
                          bed_site)
 
-        state_gcmd = gcmd
-        if self.calibration_endstop is not None:
-            state_gcmd = _DedicatedEndstopGCodeCommand(gcmd)
-        state = CalibrationState(self, state_gcmd)
+        state = CalibrationState(self, gcmd)
         state.calibrate_z(switch_offset, nozzle_site, switch_site, bed_site)
 
 

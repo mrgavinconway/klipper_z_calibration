@@ -8,8 +8,6 @@ This fork keeps the upstream `klipper_z_calibration` workflow and adds one featu
 
 The fork deliberately does **not** add nozzle-conditioning loops, absolute bed-Z baselines, extra nozzle/probe-body geometry gates, or whole-calibration retry logic. Those are better kept as commissioning/diagnostic tools rather than mandatory print-start checks.
 
-When a dedicated calibration endstop is configured, the fork also suppresses upstream's `POSSIBLE SUGGESTION` to alter `stepper_z position_endstop`, because that recommendation only applies when the calibration switch is also the Z homing switch.
-
 ## Voron V0 / detachable ZeroClick example
 
 ```ini
@@ -58,6 +56,18 @@ end_gcode:
 ```
 
 The configured `samples` and `samples_result` are used consistently for the nozzle, rigid probe-body and bed-reference measurements. `PROBE_Z_ACCURACY` remains available for diagnostic repeatability testing.
+
+## Z homing datum and `position_endstop`
+
+The dedicated calibration switch does not replace the printer's normal Z homing endstop. `G28 Z` still establishes the machine-coordinate datum from `[stepper_z] position_endstop`.
+
+For that reason, upstream's large-offset suggestion is still meaningful. If the three Auto-Z measurements are repeatable but the calculated correction is consistently outside `offset_margins`, recenter the configured `position_endstop` using the upstream formula:
+
+```text
+new_position_endstop = current_position_endstop - calculated_offset
+```
+
+This does not move or replace the physical Z homing switch. It aligns the machine-coordinate datum so normal Auto-Z corrections remain small and `offset_margins` can continue to act as a useful safety check.
 
 ## Nozzle cleanliness
 
