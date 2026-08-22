@@ -7,7 +7,7 @@ Upstream `klipper_z_calibration` uses the printer's normal `stepper_z` endstop f
 - the normal `[stepper_z] endstop_pin` is still used by `G28 Z` and is not modified;
 - `calibration_endstop_pin` is used only by `CALIBRATE_Z` and `PROBE_Z_ACCURACY`.
 
-If `calibration_endstop_pin` is omitted, behaviour is identical to upstream.
+If `calibration_endstop_pin` is omitted, the dedicated-endstop behaviour is identical to upstream.
 
 When a dedicated calibration endstop is configured, this fork suppresses upstream's `POSSIBLE SUGGESTION` to alter `stepper_z position_endstop`. That suggestion only makes sense when the calibration switch is also the Z homing switch. In dedicated-endstop mode the normal Z homing datum must remain unchanged.
 
@@ -29,23 +29,31 @@ nozzle_xy_position: 3.5, 39.5
 
 # With ZeroClick attached, a rigid part of the probe microswitch body presses
 # the same dedicated reference switch here.
-switch_xy_position: 17, 25
+switch_xy_position: 24, 25
 
 # Physical bed point to probe with ZeroClick. Probe X/Y offsets are applied by
 # klipper_z_calibration automatically.
 bed_xy_position: 71, 63.5
 
-# Calibrate this value for the actual rigid-body contact geometry.
-switch_offset: 0.5
+# Calibrated for the actual rigid-body contact geometry.
+switch_offset: 0.550
 
-safe_z_height: 30
+safe_z_height: 15
 samples: 3
 samples_tolerance: 0.015
 samples_tolerance_retries: 3
 samples_result: median
-probing_speed: 3
+probing_first_fast: true
+probing_speed: 5
 probing_second_speed: 1
 probing_retract_dist: 1
+
+# Optional nozzle-conditioning overrides. These are also the fork defaults.
+nozzle_conditioning_samples: 8
+nozzle_conditioning_max_samples: 16
+nozzle_conditioning_window: 4
+# If omitted, samples_tolerance is used.
+# nozzle_conditioning_tolerance: 0.015
 
 # The detachable probe must be absent for the nozzle measurement.
 start_gcode:
@@ -65,7 +73,36 @@ switch always uses five samples and selects their median. The nozzle-switch
 and normal bed-probe measurements continue to use the configured `samples`
 and `samples_result` values. `PROBE_Z_ACCURACY` is unchanged.
 
-The `switch_offset` value above is only a placeholder. It must be calibrated for the actual printer before relying on the resulting Z offset.
+## Automatic nozzle conditioning
+
+Before the authoritative nozzle measurement, this fork now makes sacrificial
+nozzle-to-switch touches at `probing_speed`. This is intended to compress or
+wipe away the small amount of ooze that commonly remains on a nozzle at the
+print-start standby temperature.
+
+By default it makes at least eight touches. After that minimum, it looks at the
+last four touches and stops early once their Z range is within
+`samples_tolerance`. If the readings have not settled, it continues up to 16
+touches. Reaching the maximum does not bypass safety checks: the normal measured
+samples still run, followed by the configured nozzle/switch geometry check and
+final `offset_margins` validation.
+
+```ini
+# Set to 0 to disable nozzle conditioning and retain the old behaviour.
+nozzle_conditioning_samples: 8
+
+# Hard cap for sacrificial touches.
+nozzle_conditioning_max_samples: 16
+
+# Number of recent conditioning touches used to determine stability.
+nozzle_conditioning_window: 4
+
+# Optional dedicated stability tolerance. If omitted, samples_tolerance is used.
+# nozzle_conditioning_tolerance: 0.015
+```
+
+This conditioning is deliberately separate from `PROBE_Z_ACCURACY`; diagnostic
+accuracy tests continue to report the nozzle exactly as presented to the switch.
 
 ## Optional plausibility checks
 
