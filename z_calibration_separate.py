@@ -23,7 +23,7 @@ class _DedicatedEndstopGCodeCommand:
 
     def respond_info(self, msg, *args, **kwargs):
         # Upstream assumes the calibration switch is also stepper_z's homing
-        # endstop.  In dedicated-endstop mode that recommendation is wrong:
+        # endstop. In dedicated-endstop mode that recommendation is wrong:
         # the real homing endstop must remain unchanged.
         if ("POSSIBLE SUGGESTION" in msg
                 and "position_endstop" in msg):
@@ -37,14 +37,26 @@ class _DedicatedEndstopGCodeCommand:
 
 
 class CalibrationState(z_calibration_upstream.CalibrationState):
-    """Upstream calibration state with optional plausibility checks."""
+    """Upstream calibration state with conditioning and plausibility checks."""
 
     def __init__(self, helper, gcmd):
         super().__init__(helper, gcmd)
         self._reference_measurements = []
 
-    def _probe_on_site(self, *args, **kwargs):
-        result = super()._probe_on_site(*args, **kwargs)
+    def _probe_on_site(self, endstop, site, check_probe=False,
+                       split_xy=False, wiggle=False, samples=None,
+                       samples_result=None):
+        # The first reference measurement in CALIBRATE_Z is always the bare
+        # nozzle against the dedicated switch. Condition it before collecting
+        # any authoritative samples so a small amount of ooze is compressed or
+        # wiped away rather than becoming a false Z reference.
+        if (not self._reference_measurements
+                and self.helper.nozzle_conditioning_samples > 0):
+            self._condition_nozzle(endstop, site, split_xy, wiggle)
+
+        result = super()._probe_on_site(
+            endstop, site, check_probe=check_probe, split_xy=split_xy,
+            wiggle=wiggle, samples=samples, samples_result=samples_result)
         self._reference_measurements.append(result)
 
         # CALIBRATE_Z calls _probe_on_site in this order:
@@ -58,6 +70,57 @@ class CalibrationState(z_calibration_upstream.CalibrationState):
             self._validate_reference_measurements(
                 nozzle_zero, switch_zero, probe_zero)
         return result
+
+    def _condition_nozzle(self, endstop, site, split_xy, wiggle):
+        helper = self.helper
+        pos = self.toolhead.get_position()
+        helper._move_safe_z(pos, helper.lift_speed)
+
+        if split_xy:
+            helper._move([site[0], pos[1], None], helper.speed)
+            helper._move([site[0], site[1], site[2]], helper.speed)
+        else:
+            helper._move(site, helper.speed)
+
+        tolerance = helper.nozzle_conditioning_tolerance
+        if tolerance is None:
+            tolerance = helper.tolerance
+
+        minimum = helper.nozzle_conditioning_samples
+        maximum = helper.nozzle_conditioning_max_samples
+        window = helper.nozzle_conditioning_window
+        recent = []
+
+        self.gcmd.respond_info(
+            "%s: conditioning nozzle on calibration switch "
+            "(minimum=%d maximum=%d window=%d tolerance=%.3f)"
+            % (self.gcmd.get_command(), minimum, maximum, window, tolerance))
+
+        for sample in range(1, maximum + 1):
+            curpos = helper._probe(
+                self.gcmd, endstop, helper.position_min,
+                helper.probing_speed, wiggle=wiggle)
+            recent.append(curpos[2])
+            if len(recent) > window:
+                recent.pop(0)
+
+            if sample < minimum or len(recent) < window:
+                continue
+
+            spread = max(recent) - min(recent)
+            if spread <= tolerance:
+                self.gcmd.respond_info(
+                    "%s: nozzle conditioning stable after %d touches "
+                    "(recent range=%.3f)"
+                    % (self.gcmd.get_command(), sample, spread))
+                return
+
+        spread = max(recent) - min(recent) if recent else 0.
+        self.gcmd.respond_info(
+            "%s: nozzle conditioning reached %d touches without meeting "
+            "the %.3f stability target (recent range=%.3f); continuing to "
+            "measured samples with all normal safety checks enabled"
+            % (self.gcmd.get_command(), maximum, tolerance, spread))
 
     def _validate_reference_measurements(self, nozzle_zero, switch_zero,
                                          probe_zero):
@@ -113,9 +176,35 @@ class ZCalibrationHelper(z_calibration_upstream.ZCalibrationHelper):
             'calibration_endstop_pin', None)
         self.calibration_endstop = None
 
-        # Optional absolute/relative plausibility checks.  They deliberately
+        # Before authoritative nozzle samples, make several sacrificial touches
+        # at the normal fast probing speed. The recent readings must settle
+        # within the configured tolerance before conditioning ends early. This
+        # makes normal print-start ooze self-clearing without weakening any of
+        # the geometry or final-offset safety checks.
+        self.nozzle_conditioning_samples = config.getint(
+            'nozzle_conditioning_samples', 8, minval=0, maxval=50)
+        self.nozzle_conditioning_max_samples = config.getint(
+            'nozzle_conditioning_max_samples', 16, minval=1, maxval=100)
+        self.nozzle_conditioning_window = config.getint(
+            'nozzle_conditioning_window', 4, minval=2, maxval=20)
+        self.nozzle_conditioning_tolerance = config.getfloat(
+            'nozzle_conditioning_tolerance', None, above=0.)
+
+        if self.nozzle_conditioning_samples > 0:
+            if (self.nozzle_conditioning_max_samples
+                    < self.nozzle_conditioning_samples):
+                raise config.error(
+                    "nozzle_conditioning_max_samples must be >= "
+                    "nozzle_conditioning_samples")
+            if (self.nozzle_conditioning_window
+                    > self.nozzle_conditioning_max_samples):
+                raise config.error(
+                    "nozzle_conditioning_window must be <= "
+                    "nozzle_conditioning_max_samples")
+
+        # Optional absolute/relative plausibility checks. They deliberately
         # default to disabled because a useful expected value is printer- and
-        # temperature-specific.  If an expected value is configured, the
+        # temperature-specific. If an expected value is configured, the
         # associated default tolerance is intentionally conservative.
         self.expected_bed_probe_z = config.getfloat(
             'expected_bed_probe_z', None)
@@ -194,8 +283,8 @@ class ZCalibrationHelper(z_calibration_upstream.ZCalibrationHelper):
 
     def cmd_CALIBRATE_Z(self, gcmd):
         # This is intentionally kept equivalent to upstream's short dispatcher,
-        # but uses our CalibrationState so we can validate the three reference
-        # measurements before any runtime Z offset is applied.
+        # but uses our CalibrationState so we can condition and validate the
+        # three reference measurements before any runtime Z offset is applied.
         self.last_state = False
         if self.z_homing is None:
             raise gcmd.error("%s: must home axes first"
